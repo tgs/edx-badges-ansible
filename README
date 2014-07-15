@@ -1,0 +1,4 @@
+How to use it:
+ONLY USE IT IN THE EDX DEVSTACK VAGRANT IMAGE!
+
+ansible-playbook -i localhost, -c local bkapi.yml -s
