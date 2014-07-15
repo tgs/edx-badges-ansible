@@ -1,0 +1,82 @@
+---
+- hosts: localhost
+  vars:
+    COMMON_APP_DIR: "/edx/app"
+    badgekitapi_app_dir: "{{ COMMON_APP_DIR }}/badgekitapi"
+    badgekitapi_log_dir: "/edx/var/log/badgekitapi"
+    badgekitapi_repo: "https://github.com/mozilla/badgekit-api.git"
+    supervisor_user: supervisor
+    badgekitapi_user: "{{ supervisor_user }}"
+    supervisor_cfg: /edx/app/supervisor/supervisord.conf
+    supervisor_ctl: /edx/app/supervisor/venvs/supervisor/bin/supervisorctl
+    supervisor_available_dir: /edx/app/supervisor/conf.available.d
+    supervisor_cfg_dir: /edx/app/supervisor/conf.d
+    bkapi_env:
+      DB_NAME: "badgekitapi"
+      DB_USER: "badgekitapi"
+      DB_PASSWORD: "ia8isyu82h3ikjnakgsdj"
+      DB_HOST: localhost
+      PORT: 5001
+  sudo: yes
+    
+  handlers:
+  - name: restart badgekitapi
+    supervisorctl_local: >
+      name=badgekitapi
+      state=restarted
+      config={{ supervisor_cfg }}
+      supervisorctl_path={{ supervisor_ctl }}
+
+  tasks:
+  - name: add repository for up-to-date nodejs
+    apt_repository: repo='ppa:chris-lea/node.js' state=present
+
+  - name: update nodejs package
+    apt: update_cache=yes
+    apt: name=nodejs state=latest
+
+  - name: checkout badgekitapi into {{ badgekitapi_app_dir }}
+    git: >
+      dest={{ badgekitapi_app_dir }} repo={{ badgekitapi_repo }}
+      version=master
+
+  - name: install nodejs dependencies
+    npm: path={{ badgekitapi_app_dir }}
+
+  - name: add mysql db {{ bkapi_env.DB_NAME }}
+    mysql_db: db={{ bkapi_env.DB_NAME }} state=present encoding=utf8
+
+  - name: create mysql user {{ bkapi_env.DB_USER }}
+    mysql_user: >
+      name={{ bkapi_env.DB_USER }}
+      password={{ bkapi_env.DB_PASSWORD }}
+      priv='{{ bkapi_env.DB_NAME }}.*:ALL'
+
+  - name: run badgekitapi db migrations
+    environment: bkapi_env
+    shell: >
+      ./bin/db-migrate up
+        chdir={{ badgekitapi_app_dir }}
+
+  - name: create log directory
+    file: >
+      dest="{{ badgekitapi_log_dir }}"
+      mode=755
+      owner={{ badgekitapi_user }}
+      state=directory
+
+  - name: write supervisord config for badgekitapi
+    template: >
+      src=badgekitapi.conf.j2
+      dest="{{ supervisor_available_dir }}/badgekitapi.conf"
+    sudo_user: "{{ supervisor_user }}"
+
+  - name: enable supervisord config for badgekitapi
+    file: >
+      src="{{ supervisor_available_dir }}/badgekitapi.conf"
+      dest="{{ supervisor_cfg_dir }}/badgekitapi.conf"
+      state=link
+      force=yes
+    sudo_user: "{{ supervisor_user }}"
+    changed_when: true
+    notify: restart badgekitapi

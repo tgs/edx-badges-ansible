@@ -1,0 +1,19 @@
+;
+; {{ ansible_managed }}
+;
+
+[program:badgekitapi]
+command=node app
+autostart=true
+autorestart=true
+stopsignal=QUIT
+stdout_logfile={{ badgekitapi_log_dir }}/web-1.log
+stderr_logfile={{ badgekitapi_log_dir }}/web-1.error.log
+user=www-data
+directory={{ badgekitapi_app_dir }}
+# environment=DB_HOST="localhost",DB_NAME="badgekitapi",DB_PASSWORD="3eQYfNJShdoMqDAqznpN",DB_USER="root",MASTER_SECRET="ef902f4a9f8cc09173e002d3fc0d369e",PORT="8080"
+environment=
+{%- for name,value in bkapi_env.items() -%}
+{%- if value -%}{{name}}="{{value}}"{%- if not loop.last -%},{%- endif -%}{%- endif -%}
+{%- endfor %}
+
